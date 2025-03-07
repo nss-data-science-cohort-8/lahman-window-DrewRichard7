@@ -148,14 +148,20 @@ WHERE pace = 'On Pace'
     AND cumulative_seasons =20;
 
 
-
-
-
-
-
 -- Question 3: Anomalous Seasons
 --------------------------------------------------------------------------------
 -- Find the player who had the most anomalous season in terms of number of home runs hit. To do this, find the player who has the largest gap between the number of home runs hit in a season and the 5-year moving average number of home runs if we consider the 5-year window centered at that year (the window should include that year, the two years prior and the two years after).
+
+SELECT 
+    namefirst||' '||namelast AS playername,
+    yearid,
+    hr,
+    AVG(hr) OVER(ORDER BY yearid ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS five_yr_avg, 
+    hr - AVG(hr) OVER(ORDER BY yearid ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS hr_diff
+FROM batting AS b
+    INNER JOIN people AS p USING (playerid)
+ORDER BY hr_diff DESC;
+
 
 -- Question 4: Players Playing for one Team
 --------------------------------------------------------------------------------
