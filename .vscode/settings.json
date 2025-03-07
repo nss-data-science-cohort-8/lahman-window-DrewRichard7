@@ -1,0 +1,26 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "postgreSQL17",
+            "database": "prescribers",
+            "username": "postgres",
+            "password": "postgres",
+            "connectionTimeout": 30
+        },
+        {
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "localhost",
+            "database": "lahman-baseball",
+            "username": "postgres",
+            "password": "postgres",
+            "connectionTimeout": 30
+        }
+    ]
+}
