@@ -20,17 +20,26 @@ WHERE yearid = 2016;
 ---- Question 1b: 
 -- Which team has finished in last place in its division (i.e. with the least number of wins) the most number of times? A team's division is indicated by the divid column in the teams table.
 
--- this doesn't look right
-WITH LastPlace AS (
+-- looks like the padres are have finished last the most times 
+WITH slim AS (
     SELECT 
         name,
         yearid,
         lgid||divid AS division,
-        w,
-        RANK() OVER(PARTITION BY yearid, lgid, divid ORDER BY w) as rank_in_division
+        w
     FROM teams
-    WHERE lgid IS NOT NULL 
+    WHERE lgid IS NOT NULL
         AND divid IS NOT NULL
+),
+
+LastPlace AS (
+    SELECT 
+        name,
+        yearid,
+        division,
+        w,
+        RANK() OVER(PARTITION BY yearid, division ORDER BY w) as rank_in_division
+    FROM slim 
 )
 SELECT 
     name,
@@ -42,18 +51,31 @@ ORDER BY number_of_last_place_finishes DESC;
 
 
 
-
-
-
-
-
 -- Question 2: Cumulative Sums
 --------------------------------------------------------------------------------
 ---- Question 2a: 
 -- Barry Bonds has the record for the highest career home runs, with 762. Write a query which returns, for each season of Bonds' career the total number of seasons he had played and his total career home runs at the end of that season. (Barry Bonds' playerid is bondsba01.)
 
+SELECT 
+    namefirst||' '||namelast AS playername,
+    yearid,
+    SUM(hr) OVER(ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_hr,
+    COUNT(*) OVER(ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_seasons
+FROM batting AS b
+INNER JOIN people AS p USING(playerid)
+WHERE playerid = 'bondsba01'
+ORDER BY yearid;
+
+
+
 ---- Question 2b:
 -- How many players at the end of the 2016 season were on pace to beat Barry Bonds' record? For this question, we will consider a player to be on pace to beat Bonds' record if they have more home runs than Barry Bonds had the same number of seasons into his career. 
+
+
+
+
+
+
 
 ---- Question 2c: 
 -- Were there any players who 20 years into their career who had hit more home runs at that point into their career than Barry Bonds had hit 20 years into his career? 
