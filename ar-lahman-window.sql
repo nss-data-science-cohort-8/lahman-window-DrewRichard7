@@ -72,13 +72,86 @@ ORDER BY yearid;
 -- How many players at the end of the 2016 season were on pace to beat Barry Bonds' record? For this question, we will consider a player to be on pace to beat Bonds' record if they have more home runs than Barry Bonds had the same number of seasons into his career. 
 
 
-
-
+WITH hr_partition AS (
+    SELECT 
+        namefirst||' '||namelast AS playername,
+        playerid,
+        yearid,
+        SUM(hr) OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_hr,
+        COUNT(*) OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_seasons
+    FROM batting AS b
+        INNER JOIN people AS p USING(playerid)
+    WHERE yearid <= 2016 -- comment out both WHERE to get all time players at end through their careers who were on pace to have more hr than BB 
+),
+bonds AS (
+    SELECT 
+        cumulative_seasons,
+        cumulative_hr as bonds_hr
+    FROM hr_partition
+    WHERE playerid = 'bondsba01'
+),
+players_pace AS (
+    SELECT 
+        h.playername AS playername,
+        h.yearid,
+        h.cumulative_hr AS cumulative_hr,
+        h.cumulative_seasons AS cumulative_seasons,
+        b.bonds_hr,
+        CASE WHEN h.cumulative_hr > b.bonds_hr THEN 'On Pace' ELSE 'Not On Pace' END AS pace
+    FROM hr_partition AS h
+    LEFT JOIN bonds AS b ON h.cumulative_seasons = b.cumulative_seasons
+    WHERE h.yearid = 2016 -- comment out to get all time 
+        AND h.playerid != 'bondsba01'
+)
+SELECT playername, cumulative_hr, cumulative_seasons 
+FROM players_pace
+WHERE pace = 'On Pace';
 
 
 
 ---- Question 2c: 
 -- Were there any players who 20 years into their career who had hit more home runs at that point into their career than Barry Bonds had hit 20 years into his career? 
+
+-- Looks like Atlanta Braves Legend Henry Aaron was on pace, and that's it. 
+WITH hr_partition AS (
+    SELECT 
+        namefirst||' '||namelast AS playername,
+        playerid,
+        yearid,
+        SUM(hr) OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_hr,
+        COUNT(*) OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_seasons
+    FROM batting AS b
+        INNER JOIN people AS p USING(playerid)
+),
+bonds AS (
+    SELECT 
+        cumulative_seasons,
+        cumulative_hr as bonds_hr
+    FROM hr_partition
+    WHERE playerid = 'bondsba01'
+),
+players_pace AS (
+    SELECT 
+        h.playername AS playername,
+        h.yearid,
+        h.cumulative_hr AS cumulative_hr,
+        h.cumulative_seasons AS cumulative_seasons,
+        b.bonds_hr,
+        CASE WHEN h.cumulative_hr > b.bonds_hr THEN 'On Pace' ELSE 'Not On Pace' END AS pace
+    FROM hr_partition AS h
+    LEFT JOIN bonds AS b ON h.cumulative_seasons = b.cumulative_seasons
+    WHERE h.playerid != 'bondsba01'
+)
+SELECT playername, cumulative_hr, cumulative_seasons 
+FROM players_pace
+WHERE pace = 'On Pace'
+    AND cumulative_seasons =20;
+
+
+
+
+
+
 
 -- Question 3: Anomalous Seasons
 --------------------------------------------------------------------------------
