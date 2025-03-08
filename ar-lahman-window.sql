@@ -239,21 +239,41 @@ ORDER BY career_length DESC;
 ---- Question 5a: 
 -- How many times did a team win the World Series in consecutive years?
 
+-- there have been 21 instances of back-to-back world series winners, and 22 instances of baseball championships won in consecutive years. this table contains records from before the 1903 world series, and there was one back-to-back winner before the WS was established. 
+WITH winners AS (
+    SELECT 
+        teamid,
+        yearid AS ws_win_year,
+        LAG(yearid) OVER(PARTITION BY teamid ORDER BY yearid) AS prev_wswin,
+        CASE WHEN (yearid - LAG(yearid) OVER(PARTITION BY teamid ORDER BY yearid)) = 1 THEN 'Y' ELSE 'N' END AS consecutive
+    FROM teams
+    WHERE wswin = 'Y' AND yearid >=1903
+    ORDER BY 
+        teamid, 
+        yearid
+)
 SELECT 
-    teamid,
-    yearid,
-    wswin,
-    LAG(wswin) OVER(PARTITION BY teamid ORDER BY yearid) AS prev_wswin,
-    LEAD(wswin) OVER(PARTITION BY teamid ORDER BY yearid) AS next_wswin
-FROM teams
-WHERE wswin = 'Y';
-
-
+    COUNT(*) AS n_consecutive_wins
+FROM winners
+WHERE consecutive = 'Y';
 
 
 
 ---- Question 5b: 
 -- What is the longest steak of a team winning the World Series? Write a query that produces this result rather than scanning the output of your previous answer.
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ---- Question 5c: 
 -- A team made the playoffs in a year if either divwin, wcwin, or lgwin will are equal to 'Y'. Which team has the longest streak of making the playoffs? 
