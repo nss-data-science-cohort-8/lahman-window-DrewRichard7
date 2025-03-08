@@ -263,16 +263,27 @@ WHERE consecutive = 'Y';
 -- What is the longest steak of a team winning the World Series? Write a query that produces this result rather than scanning the output of your previous answer.
 
 
+-- 1949-1953 NY yankees won 5 straight world series
 
-
-
-
-
-
-
-
-
-
+WITH streaks AS (
+    SELECT 
+        name,
+        teamid,
+        yearid,
+        yearid - ROW_NUMBER() OVER(PARTITION BY teamid ORDER BY yearid) AS streak_group
+    FROM teams
+    WHERE wswin = 'Y'
+    ORDER BY teamid, yearid
+)
+SELECT 
+    name,
+    MIN(yearid) as streak_start,
+    MAX(yearid) as streak_end,
+    COUNT(*) as streak_length
+FROM streaks
+GROUP BY name, teamid, streak_group
+HAVING COUNT(*) > 1
+ORDER BY streak_length DESC;
 
 
 ---- Question 5c: 
