@@ -169,13 +169,88 @@ ORDER BY hr_diff DESC;
 ---- Question 4a: 
 -- Warmup: How many players played at least 10 years in the league and played for exactly one team? (For this question, exclude any players who played in the 2016 season). Who had the longest career with a single team? (You can probably answer this question without needing to use a window function.)
 
+-- brooks robinson played 23 years for one team
+-- carl yastrzemski played 23 years but his team went through a name change so techincally he could be listed twice
+WITH career AS (
+    SELECT 
+        playerid,
+        COUNT(DISTINCT yearid) AS career_length,
+        COUNT(DISTINCT teamid) AS n_teams,
+        teamid
+    FROM batting
+    WHERE yearid <> 2016
+    GROUP BY playerid, teamid
+)
+SELECT 
+    DISTINCT namefirst||' '||namelast AS playername,
+    career_length,
+    n_teams,
+    name AS team
+FROM career AS c
+    INNER JOIN people AS p USING(playerid)
+    INNER JOIN teams AS t USING(teamid)
+    WHERE career_length >= 10
+        AND n_teams = 1
+ORDER BY career_length DESC;
+
+
 ---- Question 4b: 
 -- Some players start and end their careers with the same team but play for other teams in between. For example, Barry Zito started his career with the Oakland Athletics, moved to the San Francisco Giants for 7 seasons before returning to the Oakland Athletics for his final season. How many players played at least 10 years in the league and start and end their careers with the same team but played for at least one other team during their career? For this question, exclude any players who played in the 2016 season.
+
+-- 203 players played for the same team at the beginning and end of their career, but for at least one other team in between 
+WITH career_10_multiteam AS (
+    SELECT 
+        playerid,
+        COUNT(DISTINCT yearid) AS career_length,
+        COUNT(DISTINCT teamid) AS n_teams
+    FROM batting
+        INNER JOIN people USING (playerid)
+    WHERE yearid <> 2016
+    GROUP BY playerid
+    HAVING COUNT(DISTINCT yearid) >= 10
+        AND COUNT(DISTINCT teamid) > 1
+),
+first_last_teams AS (
+    SELECT
+        DISTINCT playerid,
+        FIRST_VALUE(teamid) OVER (PARTITION BY playerid ORDER BY yearid) as first_team,
+        FIRST_VALUE(teamid) OVER (PARTITION BY playerid ORDER BY yearid DESC) as last_team
+    FROM batting
+    WHERE yearid <> 2016
+)
+SELECT DISTINCT 
+    namefirst || ' ' || namelast AS playername,
+    career_length,
+    n_teams AS n_distinct_teams,
+    first_team,
+    last_team
+FROM career_10_multiteam AS cm
+    INNER JOIN people p USING (playerid)
+    INNER JOIN first_last_teams AS flt USING (playerid)
+WHERE career_length >= 10 
+    AND n_teams > 1
+    AND first_team = last_team
+ORDER BY career_length DESC;
+
+
 
 -- Question 5: Streaks
 --------------------------------------------------------------------------------
 ---- Question 5a: 
 -- How many times did a team win the World Series in consecutive years?
+
+SELECT 
+    teamid,
+    yearid,
+    wswin,
+    LAG(wswin) OVER(PARTITION BY teamid ORDER BY yearid) AS prev_wswin,
+    LEAD(wswin) OVER(PARTITION BY teamid ORDER BY yearid) AS next_wswin
+FROM teams
+WHERE wswin = 'Y';
+
+
+
+
 
 ---- Question 5b: 
 -- What is the longest steak of a team winning the World Series? Write a query that produces this result rather than scanning the output of your previous answer.
