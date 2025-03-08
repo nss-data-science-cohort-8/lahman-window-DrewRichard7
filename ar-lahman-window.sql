@@ -289,8 +289,74 @@ ORDER BY streak_length DESC;
 ---- Question 5c: 
 -- A team made the playoffs in a year if either divwin, wcwin, or lgwin will are equal to 'Y'. Which team has the longest streak of making the playoffs? 
 
+WITH playoffs AS (
+    SELECT
+        name,
+        teamid,
+        yearid,
+        CASE WHEN divwin = 'Y' OR wcwin = 'Y' OR lgwin = 'Y' THEN 'Y' ELSE 'N' END AS playoff
+    FROM teams
+),
+streaks AS (
+    SELECT 
+        name,
+        teamid,
+        yearid,
+        yearid - ROW_NUMBER() OVER(PARTITION BY teamid ORDER BY yearid) AS streak_group
+    FROM playoffs
+    WHERE playoff = 'Y'
+    ORDER BY teamid, yearid
+)
+SELECT 
+    name,
+    MIN(yearid) as streak_start,
+    MAX(yearid) as streak_end,
+    COUNT(*) as streak_length
+FROM streaks
+GROUP BY name, teamid, streak_group
+HAVING COUNT(*) > 1
+ORDER BY streak_length DESC;
+
+
 ---- Question 5d: 
 -- The 1994 season was shortened due to a strike. If we don't count a streak as being broken by this season, does this change your answer for the previous part?
+
+-- excluding the 1994 season, the longest postseason streak is the atlanta braves from 1991-2005, 
+WITH playoffs AS (
+    SELECT
+        name,
+        teamid,
+        yearid,
+        CASE WHEN divwin = 'Y' OR wcwin = 'Y' OR lgwin = 'Y' OR yearid=1994 THEN 'Y' ELSE 'N' END AS playoff
+    FROM teams
+),
+streaks AS (
+    SELECT 
+        name,
+        teamid,
+        yearid,
+        yearid - ROW_NUMBER() OVER(PARTITION BY teamid ORDER BY yearid) AS streak_group
+    FROM playoffs
+    WHERE playoff = 'Y' 
+    ORDER BY teamid, yearid
+)
+SELECT 
+    name||'*' AS teamname,
+    MIN(yearid) as streak_start,
+    MAX(yearid) as streak_end,
+    COUNT(*) - 1 as streak_length
+FROM streaks
+GROUP BY name, teamid, streak_group
+HAVING COUNT(*) > 1
+ORDER BY streak_length DESC;
+
+
+
+
+
+
+
+
 
 -- Question 6: Manager Effectiveness
 --------------------------------------------------------------------------------
