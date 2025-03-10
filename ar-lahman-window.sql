@@ -21,6 +21,7 @@ WHERE yearid = 2016;
 -- Which team has finished in last place in its division (i.e. with the least number of wins) the most number of times? A team's division is indicated by the divid column in the teams table.
 
 -- looks like the padres are have finished last the most times 
+-- commenting out this first where clause will show that the phillies have finished last, which is accounting for the years when there was only one division (default).
 WITH slim AS (
     SELECT 
         name,
@@ -28,8 +29,8 @@ WITH slim AS (
         lgid||divid AS division,
         w
     FROM teams
-    WHERE lgid IS NOT NULL
-        AND divid IS NOT NULL
+    -- WHERE lgid IS NOT NULL
+        -- AND divid IS NOT NULL
 ),
 
 LastPlace AS (
@@ -60,7 +61,7 @@ SELECT
     namefirst||' '||namelast AS playername,
     yearid,
     SUM(hr) OVER(ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_hr,
-    COUNT(*) OVER(ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_seasons
+    RANK() OVER(ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_seasons
 FROM batting AS b
 INNER JOIN people AS p USING(playerid)
 WHERE playerid = 'bondsba01'
@@ -78,7 +79,7 @@ WITH hr_partition AS (
         playerid,
         yearid,
         SUM(hr) OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_hr,
-        COUNT(*) OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_seasons
+        DENSE_RANK() OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_seasons
     FROM batting AS b
         INNER JOIN people AS p USING(playerid)
     WHERE yearid <= 2016 -- comment out both WHERE to get all time players at end through their careers who were on pace to have more hr than BB 
@@ -119,7 +120,7 @@ WITH hr_partition AS (
         playerid,
         yearid,
         SUM(hr) OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_hr,
-        COUNT(*) OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_seasons
+        RANK() OVER(PARTITION BY playerid ORDER BY yearid ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_seasons
     FROM batting AS b
         INNER JOIN people AS p USING(playerid)
 ),
@@ -205,16 +206,17 @@ WITH career_10_multiteam AS (
         COUNT(DISTINCT teamid) AS n_teams
     FROM batting
         INNER JOIN people USING (playerid)
-    WHERE yearid <> 2016
+    -- WHERE yearid <> 2016
     GROUP BY playerid
     HAVING COUNT(DISTINCT yearid) >= 10
         AND COUNT(DISTINCT teamid) > 1
+        AND MAX(yearid) < 2016 -- looks at 2016 and excludes anyone who appears
 ),
 first_last_teams AS (
     SELECT
         DISTINCT playerid,
-        FIRST_VALUE(teamid) OVER (PARTITION BY playerid ORDER BY yearid) as first_team,
-        FIRST_VALUE(teamid) OVER (PARTITION BY playerid ORDER BY yearid DESC) as last_team
+        FIRST_VALUE(teamid) OVER (PARTITION BY playerid ORDER BY yearid, stint) as first_team,
+        FIRST_VALUE(teamid) OVER (PARTITION BY playerid ORDER BY yearid DESC, stint DESC) as last_team
     FROM batting
     WHERE yearid <> 2016
 )
@@ -232,14 +234,11 @@ WHERE career_length >= 10
     AND first_team = last_team
 ORDER BY career_length DESC;
 
-
-
 -- Question 5: Streaks
 --------------------------------------------------------------------------------
 ---- Question 5a: 
 -- How many times did a team win the World Series in consecutive years?
 
--- there have been 21 instances of back-to-back world series winners, and 22 instances of baseball championships won in consecutive years. this table contains records from before the 1903 world series, and there was one back-to-back winner before the WS was established. 
 WITH winners AS (
     SELECT 
         teamid,
@@ -257,7 +256,7 @@ SELECT
 FROM winners
 WHERE consecutive = 'Y';
 
-
+-- there have been 21 instances of back-to-back world series winners, and 22 instances of baseball championships won in consecutive years. this table contains records from before the 1903 world series, and there was one back-to-back winner before the WS was established. 
 
 ---- Question 5b: 
 -- What is the longest steak of a team winning the World Series? Write a query that produces this result rather than scanning the output of your previous answer.
@@ -351,13 +350,58 @@ HAVING COUNT(*) > 1
 ORDER BY streak_length DESC;
 
 
-
-
-
-
-
-
-
 -- Question 6: Manager Effectiveness
 --------------------------------------------------------------------------------
 -- Which manager had the most positive effect on a team's winning percentage? To determine this, calculate the average winning percentage in the three years before the manager's first full season and compare it to the average winning percentage for that manager's 2nd through 4th full season. Consider only managers who managed at least 4 full years at the new team and teams that had been in existence for at least 3 years prior to the manager's first full season.
+SELECT * FROM managers;
+
+WITH winpct AS (
+
+    SELECT
+        namefirst||' '||namelast AS manager_name, 
+        playerid,
+        teamid,
+        yearid,
+        w,
+        l,
+        g,
+        ROW_NUMBER() OVER(PARTITION BY playerid, teamid ORDER BY yearid) AS year_of_stint,
+        COUNT(*) OVER(PARTITION BY playerid, teamid) AS stint_length,
+        yearid - ROW_NUMBER() OVER(PARTITION BY playerid, teamid ORDER BY yearid) + 1 AS start_year
+
+    FROM managers 
+        INNER JOIN people USING(playerid)
+
+),
+
+qualified_stints AS (
+
+    SELECT 
+        *
+    
+    FROM winpct 
+
+    WHERE stint_length >= 4
+        AND winpct.teamid IN (
+            SELECT w.teamid
+            FROM winpct AS w
+            WHERE w.teamid = winpct.teamid
+                AND w.yearid <= winpct.start_year - 3
+        )
+)
+
+SELECT
+    manager_name,
+    teamid,
+    yearid,
+    start_year,
+    w::FLOAT/(g::FLOAT) AS win_prop,
+
+
+
+   FROM qualified_stints AS q
+
+
+
+
+
