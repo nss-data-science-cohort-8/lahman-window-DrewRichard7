@@ -358,7 +358,7 @@ SELECT * FROM managers;
 WITH winpct AS (
 
     SELECT
-        namefirst||' '||namelast AS manager_name, 
+        namefirst||' '||namelast AS manager_name,
         playerid,
         teamid,
         yearid,
@@ -369,39 +369,127 @@ WITH winpct AS (
         COUNT(*) OVER(PARTITION BY playerid, teamid) AS stint_length,
         yearid - ROW_NUMBER() OVER(PARTITION BY playerid, teamid ORDER BY yearid) + 1 AS start_year
 
-    FROM managers 
+    FROM managers
         INNER JOIN people USING(playerid)
-
 ),
 
 qualified_stints AS (
 
-    SELECT 
+    SELECT
         *
-    
-    FROM winpct 
 
+    FROM winpct
     WHERE stint_length >= 4
-        AND winpct.teamid IN (
-            SELECT w.teamid
-            FROM winpct AS w
-            WHERE w.teamid = winpct.teamid
-                AND w.yearid <= winpct.start_year - 3
-        )
+      AND EXISTS ( 
+
+        SELECT 1
+        FROM winpct AS w
+        WHERE w.playerid = winpct.playerid
+            AND w.teamid = winpct.teamid
+            AND w.yearid <= winpct.start_year - 3
+      )
 )
 
 SELECT
     manager_name,
     teamid,
-    yearid,
     start_year,
-    w::FLOAT/(g::FLOAT) AS win_prop,
+    SUM(w)::FLOAT/(SUM(g)::FLOAT) AS win_prop,
+    AVG(SUM(w)::FLOAT / SUM(g)::FLOAT) OVER(PARTITION BY playerid, teamid ORDER BY yearid ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING) AS prev_3yr_avg,
+    AVG(SUM(w)::FLOAT / SUM(g)::FLOAT) OVER(PARTITION BY playerid, teamid ORDER BY yearid ROWS BETWEEN 2 FOLLOWING AND 4 FOLLOWING) AS next_3yr_avg,
+    AVG(SUM(w)::FLOAT / SUM(g)::FLOAT) OVER(PARTITION BY playerid, teamid ORDER BY yearid ROWS BETWEEN 2 FOLLOWING AND 4 FOLLOWING) - AVG(SUM(w)::FLOAT / SUM(g)::FLOAT) OVER(PARTITION BY playerid, teamid ORDER BY yearid ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING) AS win_prop_diff
+
+FROM qualified_stints AS q
+GROUP BY manager_name, teamid, start_year, playerid, yearid
+ORDER BY win_prop_diff DESC NULLS LAST;
+
+-- i think this is rolling avg, not the required stints
 
 
 
-   FROM qualified_stints AS q
+-- fresh attempt  
+--------------------------------------------------------------------------------
 
+-- CTE to identify all manager stints with their first year and stint length
+WITH manager_stints AS (
 
+    SELECT 
+        namefirst || ' ' || namelast AS manager_name,
+        playerid,
+        m.teamid,
+        m.yearid,
+        ROW_NUMBER() OVER(PARTITION BY playerid, m.teamid ORDER BY m.yearid) AS year_num,
+        COUNT(*) OVER(PARTITION BY playerid, m.teamid) AS stint_length,
+        MIN(m.yearid) OVER(PARTITION BY playerid, m.teamid) AS first_year
 
+    FROM managers m
+    INNER JOIN people p USING(playerid)
+),
 
+-- Get managers who managed at least 4 full years at the same team
+qualified_managers AS (
 
+    SELECT DISTINCT
+        manager_name,
+        playerid,
+        teamid,
+        first_year
+
+    FROM manager_stints
+    WHERE stint_length >= 4
+),
+
+-- Calculate team's average winning percentage for 3 years BEFORE manager's arrival
+-- Using the teams table directly for win/loss data
+team_before AS (
+
+    SELECT
+        qm.manager_name,
+        qm.playerid,
+        qm.teamid,
+        qm.first_year,
+        SUM(t.w)::FLOAT / SUM(t.g)::FLOAT AS pre_avg_win_pct  
+
+    FROM qualified_managers qm
+        INNER JOIN teams t ON qm.teamid = t.teamid 
+    WHERE t.yearid BETWEEN qm.first_year - 3 AND qm.first_year - 1  -- 3 years before first year
+    GROUP BY qm.manager_name, qm.playerid, qm.teamid, qm.first_year
+    HAVING COUNT(*) = 3  -- Ensure team existed for all 3 years before manager arrived
+),
+
+-- Calculate manager's average winning percentage for years 2-4 of their tenure
+-- Using the teams table and filtering by years when manager was active
+manager_period AS (
+
+    SELECT
+        qm.manager_name,
+        t.name AS team_name,
+        qm.playerid,
+        qm.teamid,
+        qm.first_year,
+        SUM(t.w)::FLOAT / SUM(t.g)::FLOAT AS manager_avg_win_pct  
+
+    FROM qualified_managers qm
+        INNER JOIN teams t ON qm.teamid = t.teamid
+    WHERE t.yearid BETWEEN qm.first_year + 1 AND qm.first_year + 3  -- Years 2-4 of manager's tenure
+    GROUP BY qm.manager_name, t.name, qm.playerid, qm.teamid, qm.first_year
+    HAVING COUNT(*) = 3  
+)
+
+-- Join the before and after periods, calculate improvement, and rank by improvement
+SELECT
+    tb.manager_name,
+    tb.teamid,
+    mp.team_name,
+    tb.first_year AS start_year,
+    tb.pre_avg_win_pct AS avg_win_pct_before, 
+    mp.manager_avg_win_pct AS avg_win_pct_during, 
+    mp.manager_avg_win_pct - tb.pre_avg_win_pct AS win_pct_improvement,  
+    (mp.manager_avg_win_pct - tb.pre_avg_win_pct) * 100 AS pct_point_improvement  
+
+FROM team_before tb
+    INNER JOIN manager_period mp 
+        ON tb.playerid = mp.playerid 
+        AND tb.teamid = mp.teamid 
+        AND tb.first_year = mp.first_year
+ORDER BY win_pct_improvement DESC;  
